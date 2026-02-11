@@ -648,7 +648,7 @@ export default function Dashboard() {
         {/* ── 자동 갱신 안내 Footer ── */}
         <div className="text-center py-4">
           <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-            데이터는 60초마다 자동으로 갱신됩니다 · 경상남도 노인맞춤돌봄서비스 광역지원기관
+            데이터는 60초마다 자동으로 갱신됩니다 · 경상남도 노인맞춤돌봄서비스 광역지원기관 (v1.1)
           </p>
         </div>
       </main>
