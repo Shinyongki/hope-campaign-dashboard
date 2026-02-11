@@ -321,17 +321,20 @@ export default function Dashboard() {
           <div className="flex items-center justify-between mb-6">
             <div>
               <h2 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>
-                시·군별 배분 현황
+                시·군별 제출 현황
               </h2>
               <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
-                지역별 수령 박스 수 현황
+                지역별 기관 제출 완료 현황 (전체 대비 제출)
               </p>
             </div>
           </div>
 
           <div className="w-full h-[350px]">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data.cityStats} margin={{ top: 5, right: 10, left: 0, bottom: 60 }}>
+              <BarChart
+                data={data.cityStats.map(s => ({ ...s, unsubmitted: s.total - s.submitted }))}
+                margin={{ top: 5, right: 10, left: 0, bottom: 60 }}
+              >
                 <CartesianGrid
                   strokeDasharray="3 3"
                   stroke={darkMode ? '#334155' : '#E2E8F0'}
@@ -361,18 +364,14 @@ export default function Dashboard() {
                     color: darkMode ? '#F1F5F9' : '#0F172A',
                     fontSize: '13px',
                   }}
-                  formatter={(value: number | undefined, name: string | undefined) => {
-                    const label = name === 'boxes' ? '박스' : name === 'quantity' ? '수량' : (name ?? '');
-                    return [(value ?? 0).toLocaleString(), label];
+                  formatter={(value: number, name: string) => {
+                    const label = name === 'submitted' ? '제출' : name === 'unsubmitted' ? '미제출' : name;
+                    return [`${value}개소`, label];
                   }}
-                  labelFormatter={(label) => `📍 ${label}`}
                   cursor={{ fill: darkMode ? 'rgba(59, 130, 246, 0.1)' : 'rgba(37, 99, 235, 0.06)' }}
                 />
-                <Bar dataKey="boxes" name="boxes" radius={[6, 6, 0, 0]} maxBarSize={40}>
-                  {data.cityStats.map((_entry, index) => (
-                    <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                  ))}
-                </Bar>
+                <Bar dataKey="submitted" name="submitted" stackId="a" fill="#3B82F6" radius={[0, 0, 4, 4]} maxBarSize={40} />
+                <Bar dataKey="unsubmitted" name="unsubmitted" stackId="a" fill={darkMode ? '#475569' : '#E2E8F0'} radius={[4, 4, 0, 0]} maxBarSize={40} />
               </BarChart>
             </ResponsiveContainer>
           </div>
