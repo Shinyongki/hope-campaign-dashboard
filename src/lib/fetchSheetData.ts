@@ -57,6 +57,11 @@ export async function fetchSheetData(): Promise<SurveyResponse[]> {
     }
 }
 
+// 기관명 별칭 매핑 (시트에 잘못 입력된 이름 → 정식 이름)
+const ORG_NAME_ALIASES: Record<string, string> = {
+    '사천건양주간보호센터': '사천건양주야간보호센터',
+};
+
 // CSV 텍스트를 SurveyResponse 배열로 변환
 function parseCSV(text: string): SurveyResponse[] {
     const lines = text.split('\n').filter(line => line.trim() !== '');
@@ -66,11 +71,14 @@ function parseCSV(text: string): SurveyResponse[] {
 
     return lines.slice(1).map(line => {
         const fields = parseCSVLine(line);
+        const rawOrgName = (fields[20] || '').trim();
+        // 별칭 매핑 적용: 잘못 입력된 이름을 정식 이름으로 변환
+        const orgName = ORG_NAME_ALIASES[rawOrgName] || rawOrgName;
 
         return {
             timestamp: fields[0] || '',          // A열 (Column 0): 타임스탬프
             city: fields[1] || '',               // B열 (Column 1): 소속 시군
-            orgName: fields[20] || '',           // U열 (Column 20): 통합 수행기관명
+            orgName,                             // U열 (Column 20): 통합 수행기관명
             boxes: parseNumber(fields[21]),      // V열 (Column 21): 수령 박스 수
             quantity: parseNumber(fields[22]),    // W열 (Column 22): 내용물 총 수량
             remarks: fields[23] || '',           // X열 (Column 23): 기타 특이사항

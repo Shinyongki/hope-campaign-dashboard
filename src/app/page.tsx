@@ -725,6 +725,12 @@ function KPICard({
 
 /* ── Submitted Table ── */
 function SubmittedTable({ responses, darkMode, onRemarkClick }: { responses: SurveyResponse[]; darkMode: boolean; onRemarkClick: (orgName: string, text: string) => void }) {
+  // 기관명으로 전화번호 조회
+  const phoneMap = useMemo(() => {
+    const map = new Map<string, string>();
+    MASTER_ORGS.forEach(org => map.set(org.name, org.phone));
+    return map;
+  }, []);
   if (responses.length === 0) {
     return (
       <div className="py-16 text-center">
@@ -761,6 +767,12 @@ function SubmittedTable({ responses, darkMode, onRemarkClick }: { responses: Sur
             </th>
             <th className="text-left px-5 py-4 font-semibold text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
               담당자
+            </th>
+            <th className="text-left px-5 py-4 font-semibold text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+              연락처
+            </th>
+            <th className="text-center px-5 py-4 font-semibold text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+              전화
             </th>
             <th className="text-left px-5 py-4 font-semibold text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
               제출시간
@@ -821,6 +833,26 @@ function SubmittedTable({ responses, darkMode, onRemarkClick }: { responses: Sur
               </td>
               <td className="px-5 py-3.5 text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
                 {r.managerName || '—'}
+              </td>
+              <td className="px-5 py-3.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                {phoneMap.get(r.orgName) || '—'}
+              </td>
+              <td className="px-5 py-3.5 text-center">
+                {phoneMap.get(r.orgName) ? (
+                  <a
+                    href={`tel:${phoneMap.get(r.orgName)!.replace(/-/g, '')}`}
+                    className="inline-flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-200 hover:scale-110"
+                    style={{
+                      backgroundColor: '#10B98115',
+                      color: '#10B981',
+                    }}
+                    title={`${r.orgName} 전화 걸기`}
+                  >
+                    <Phone className="w-4 h-4" />
+                  </a>
+                ) : (
+                  <span style={{ color: 'var(--text-muted)' }}>—</span>
+                )}
               </td>
               <td className="px-5 py-3.5 text-xs" style={{ color: 'var(--text-muted)' }}>
                 {r.timestamp ? formatTimestamp(r.timestamp) : '—'}
