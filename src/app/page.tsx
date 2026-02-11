@@ -11,7 +11,7 @@ import {
   CheckCircle2, XCircle, Clock, TrendingUp
 } from 'lucide-react';
 import { fetchSheetData, processDashboardData } from '@/lib/fetchSheetData';
-import { CITIES, TOTAL_ORGS } from '@/lib/masterData';
+import { CITIES, TOTAL_ORGS, MASTER_ORGS } from '@/lib/masterData';
 import type { DashboardData, Organization, SurveyResponse } from '@/lib/masterData';
 
 const REFRESH_INTERVAL = 60_000; // 60초
@@ -33,6 +33,23 @@ export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'submitted' | 'unsubmitted'>('submitted');
   const [showCityDropdown, setShowCityDropdown] = useState(false);
+  const [expandedCities, setExpandedCities] = useState<Set<string>>(new Set());
+
+  const toggleCity = useCallback((city: string) => {
+    setExpandedCities(prev => {
+      const next = new Set(prev);
+      if (next.has(city)) next.delete(city); else next.add(city);
+      return next;
+    });
+  }, []);
+
+  const expandAll = useCallback(() => {
+    setExpandedCities(new Set(CITIES));
+  }, []);
+
+  const collapseAll = useCallback(() => {
+    setExpandedCities(new Set());
+  }, []);
 
   // 데이터 로드
   const loadData = useCallback(async (isRefresh = false) => {
@@ -359,6 +376,108 @@ export default function Dashboard() {
             </ResponsiveContainer>
           </div>
         </div>
+
+        {/* ── 시·군별 상세 현황 ── */}
+        {data && (
+          <div
+            className="rounded-2xl p-6 animate-fade-in-up"
+            style={{
+              backgroundColor: 'var(--bg-card)',
+              boxShadow: 'var(--shadow-card)',
+              border: '1px solid var(--border-color)',
+              animationDelay: '0.35s',
+            }}
+          >
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <h2 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>
+                  시·군별 상세 현황
+                </h2>
+                <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
+                  각 시·군의 제출 / 미제출 기관을 확인하세요
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={expandAll}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:scale-105"
+                  style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)' }}
+                >
+                  전체 펼치기
+                </button>
+                <button
+                  onClick={collapseAll}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:scale-105"
+                  style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)' }}
+                >
+                  전체 접기
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {CITIES.map(city => {
+                const cityOrgs = MASTER_ORGS.filter(o => o.city === city);
+                const submittedNames = new Set(data.responses.map(r => r.orgName.trim()));
+                const submitted = cityOrgs.filter(o => submittedNames.has(o.name));
+                const unsubmitted = cityOrgs.filter(o => !submittedNames.has(o.name));
+                const isExpanded = expandedCities.has(city);
+                const allDone = unsubmitted.length === 0;
+
+                return (
+                  <div
+                    key={city}
+                    className="rounded-xl overflow-hidden transition-all duration-200"
+                    style={{
+                      border: `1px solid ${allDone ? '#10B98140' : 'var(--border-color)'}`,
+                      backgroundColor: allDone ? (darkMode ? 'rgba(16, 185, 129, 0.05)' : 'rgba(16, 185, 129, 0.03)') : 'var(--bg-primary)',
+                    }}
+                  >
+                    <button
+                      onClick={() => toggleCity(city)}
+                      className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold transition-colors hover:opacity-80"
+                      style={{ color: 'var(--text-primary)' }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span>{city}</span>
+                        <span className="text-xs font-normal px-2 py-0.5 rounded-full"
+                          style={{
+                            backgroundColor: allDone ? '#10B98120' : '#2563EB15',
+                            color: allDone ? '#10B981' : '#2563EB',
+                          }}
+                        >
+                          {submitted.length}/{cityOrgs.length}
+                        </span>
+                        {allDone && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
+                      </div>
+                      <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} style={{ color: 'var(--text-muted)' }} />
+                    </button>
+
+                    {isExpanded && (
+                      <div className="px-4 pb-3 space-y-1">
+                        {submitted.map(o => (
+                          <div key={o.code} className="flex items-center gap-2 text-xs py-1">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+                            <span style={{ color: 'var(--text-primary)' }}>{o.name}</span>
+                          </div>
+                        ))}
+                        {unsubmitted.map(o => (
+                          <div key={o.code} className="flex items-center gap-2 text-xs py-1">
+                            <XCircle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
+                            <span style={{ color: 'var(--text-secondary)' }}>{o.name}</span>
+                            <a href={`tel:${o.phone.replace(/-/g, '')}`} className="ml-auto flex-shrink-0" title={`${o.phone} 전화 걸기`}>
+                              <Phone className="w-3 h-3 text-blue-500 hover:text-blue-600" />
+                            </a>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* ── Filters & Search Bar ── */}
         <div
