@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
-  ResponsiveContainer, Cell
+  ResponsiveContainer
 } from 'recharts';
 import {
   RefreshCw, Download, Search, Sun, Moon, Package, Hash,
@@ -77,9 +77,8 @@ export default function Dashboard() {
     // return () => clearInterval(interval);
   }, [loadData]);
 
-  // 다크모드 관리
+  // 다크모드 토글
   useEffect(() => {
-    // 초기 로드 시 또는 darkMode 상태 변경 시 class 적용
     if (darkMode) {
       document.documentElement.classList.add('dark');
     } else {
@@ -185,7 +184,7 @@ export default function Dashboard() {
     <div className="min-h-screen transition-colors duration-300" style={{ backgroundColor: 'var(--bg-primary)' }}>
       {/* ── Header ── */}
       <header
-        className="sticky top-0 z-40 backdrop-blur-xl border-b"
+        className="sticky top-0 z-40 backdrop-blur-xl border-b transition-colors duration-300"
         style={{
           backgroundColor: darkMode ? 'rgba(11, 17, 32, 0.85)' : 'rgba(248, 250, 252, 0.85)',
           borderColor: 'var(--border-color)',
@@ -256,6 +255,33 @@ export default function Dashboard() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+        {/* Error Alert Card */}
+        {data && data.responses.some(r => r.boxes > 0 && r.quantity === 0) && (
+          <div className="p-1 rounded-2xl bg-gradient-to-r from-red-500 to-orange-500 shadow-lg animate-pulse-slow">
+            <div className="bg-white dark:bg-slate-900 rounded-xl p-4 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-500/20 flex items-center justify-center">
+                  <AlertCircle className="w-6 h-6 text-red-500" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-red-500">수량 입력 오류 감지</h3>
+                  <p className="text-sm text-slate-600 dark:text-slate-400">
+                    박스 수량은 입력되었으나 내용물 수량이 0인 데이터가 <span className="font-bold text-red-500">{data.responses.filter(r => r.boxes > 0 && r.quantity === 0).length}건</span> 있습니다.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  const errorRow = document.querySelector('.border-l-4.border-red-500');
+                  errorRow?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }}
+                className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-sm font-bold rounded-lg transition-colors"
+              >
+                확인하기
+              </button>
+            </div>
+          </div>
+        )}
         {/* ── KPI Cards ── */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {/* 제출율 */}
@@ -365,7 +391,7 @@ export default function Dashboard() {
                     color: darkMode ? '#F1F5F9' : '#0F172A',
                     fontSize: '13px',
                   }}
-                  formatter={(value: any, name: any) => {
+                  formatter={(value: number | string | undefined, name: string | undefined) => {
                     const label = name === 'submitted' ? '제출' : name === 'unsubmitted' ? '미제출' : name;
                     return [`${value}개소`, label];
                   }}
@@ -448,11 +474,6 @@ export default function Dashboard() {
                           }}
                         >
                           {submitted.length}/{cityOrgs.length}
-                          {!allDone && (
-                            <span className="text-red-500 font-bold ml-2">
-                              (미제출: {unsubmitted.length}개소)
-                            </span>
-                          )}
                         </span>
                         {allDone && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
                       </div>
@@ -618,9 +639,9 @@ export default function Dashboard() {
           }}
         >
           {activeTab === 'submitted' ? (
-            <SubmittedTable responses={filteredResponses} darkMode={darkMode} onRemarkClick={(orgName, text) => setRemarkModal({ orgName, text })} />
+            <SubmittedTable responses={filteredResponses} onRemarkClick={(orgName, text) => setRemarkModal({ orgName, text })} />
           ) : (
-            <UnsubmittedTable orgs={filteredUnsubmitted} darkMode={darkMode} />
+            <UnsubmittedTable orgs={filteredUnsubmitted} />
           )}
         </div>
 
@@ -730,17 +751,21 @@ function KPICard({
 }
 
 /* ── Submitted Table ── */
-function SubmittedTable({ responses, darkMode, onRemarkClick }: { responses: SurveyResponse[]; darkMode: boolean; onRemarkClick: (orgName: string, text: string) => void }) {
-  // 기관명으로 전화번호 조회 (공백 제거 및 NFC 정규화 적용)
+/* ── Submitted Table ── */
+function SubmittedTable({ responses, onRemarkClick }: { responses: SurveyResponse[]; onRemarkClick: (orgName: string, text: string) => void }) {
+  // 기관명 정규화 함수 (공백, 특수문자 제거)
+  const normalizeKey = useCallback((name: string) => {
+    return name.normalize('NFC').replace(/[^가-힣a-zA-Z0-9]/g, '');
+  }, []);
+
+  // 기관명으로 전화번호 조회
   const phoneMap = useMemo(() => {
     const map = new Map<string, string>();
     MASTER_ORGS.forEach(org => {
-      // 공백 제거 및 정규화
-      const key = org.name.normalize('NFC').replace(/\s+/g, '');
-      map.set(key, org.phone);
+      map.set(normalizeKey(org.name), org.phone);
     });
     return map;
-  }, []);
+  }, [normalizeKey]);
 
   if (responses.length === 0) {
     return (
@@ -792,26 +817,29 @@ function SubmittedTable({ responses, darkMode, onRemarkClick }: { responses: Sur
         </thead>
         <tbody>
           {responses.map((r, i) => {
-            // 검색 키도 동일하게 처리
-            const searchKey = r.orgName.normalize('NFC').replace(/\s+/g, '');
+            // Strict normalization key lookup
+            const searchKey = normalizeKey(r.orgName);
             const phone = phoneMap.get(searchKey);
             const isQuantityError = r.boxes > 0 && r.quantity === 0;
 
             return (
               <tr
                 key={i}
-                className="table-row-hover"
-                style={{ borderBottom: '1px solid var(--border-color)' }}
+                className={`table-row-hover transition-colors duration-200 ${isQuantityError ? 'bg-red-500/10 hover:bg-red-500/20' : ''}`}
+                style={{
+                  borderBottom: '1px solid var(--border-color)',
+                  ...(isQuantityError ? { borderLeft: '4px solid #EF4444' } : {})
+                }}
               >
                 <td className="px-5 py-3.5 font-medium" style={{ color: 'var(--text-muted)' }}>
                   {i + 1}
                 </td>
-                <td className="px-5 py-3.5">
+                <td className="px-5 py-3.5 whitespace-nowrap">
                   <span
-                    className="inline-flex px-2.5 py-1 rounded-full text-xs font-medium"
+                    className="inline-flex px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap"
                     style={{
-                      backgroundColor: '#2563EB15',
-                      color: '#2563EB',
+                      backgroundColor: isQuantityError ? '#EF444420' : '#2563EB15',
+                      color: isQuantityError ? '#EF4444' : '#2563EB',
                     }}
                   >
                     {r.city}
@@ -824,7 +852,7 @@ function SubmittedTable({ responses, darkMode, onRemarkClick }: { responses: Sur
                   {r.boxes.toLocaleString()}
                 </td>
                 <td
-                  // isQuantityError일 때 스타일 직접 적용 (inline style보다 class가 우선순위 낮을 수 있으므로 inline style도 조정)
+                  // isQuantityError일 때 스타일 직접 적용
                   className="px-5 py-3.5 text-right font-semibold"
                   style={{
                     color: isQuantityError ? '#EF4444' : 'var(--text-primary)',
@@ -844,6 +872,7 @@ function SubmittedTable({ responses, darkMode, onRemarkClick }: { responses: Sur
                         <AlertCircle className="w-3.5 h-3.5" />
                         <span>보기</span>
                       </button>
+                      {/* Hover Preview Tooltip */}
                       <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 pointer-events-none text-left leading-relaxed"
                         style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}>
                         <div className="text-xs font-medium mb-1 text-amber-500">미리보기</div>
@@ -890,7 +919,7 @@ function SubmittedTable({ responses, darkMode, onRemarkClick }: { responses: Sur
 }
 
 /* ── Unsubmitted Table ── */
-function UnsubmittedTable({ orgs, darkMode }: { orgs: Organization[]; darkMode: boolean }) {
+function UnsubmittedTable({ orgs }: { orgs: Organization[] }) {
   if (orgs.length === 0) {
     return (
       <div className="py-16 text-center">

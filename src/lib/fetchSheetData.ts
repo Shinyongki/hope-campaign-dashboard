@@ -1,5 +1,5 @@
 import { MASTER_ORGS, TOTAL_ORGS } from './masterData';
-import type { SurveyResponse, DashboardData, CityStats, Organization } from './masterData';
+import type { SurveyResponse, DashboardData, CityStats } from './masterData';
 
 // CSV 파싱: 한 줄을 필드 배열로 변환 (쉼표 내 큰따옴표 처리)
 function parseCSVLine(line: string): string[] {
@@ -120,23 +120,61 @@ function parseNumber(value: string | undefined): number {
 
 // 대시보드 데이터 가공
 export function processDashboardData(responses: SurveyResponse[]): DashboardData {
-    // 중복 제출 처리: 기관명 기준으로 가장 최근(마지막) 응답만 사용
-    const latestMap = new Map<string, SurveyResponse>();
+    // 중복 제출 처리: 기관명 기준으로 그룹화 후 최신 데이터 추출 + 누락 정보 보완
+    const grouped = new Map<string, SurveyResponse[]>();
     for (const r of responses) {
         const key = r.orgName.trim();
         if (key) {
-            latestMap.set(key, r); // 같은 기관은 덮어쓰기 → 마지막(최신)이 남음
+            if (!grouped.has(key)) {
+                grouped.set(key, []);
+            }
+            grouped.get(key)!.push(r);
         }
     }
-    const deduplicated = Array.from(latestMap.values());
 
-    const submittedNames = new Set(deduplicated.map(r => r.orgName.trim()));
+    const deduplicated = Array.from(grouped.values()).map(group => {
+        // 타임스탬프 기준 내림차순 정렬 (최신이 먼저 옴)
+        const sorted = group.sort((a, b) => {
+            const parseKoreanDate = (d: string) => {
+                if (!d) return 0;
+                // 정규식으로 날짜/시간 추출: "2026. 2. 11 오후 2:25:31"
+                const match = d.match(/(\d+)\.\s*(\d+)\.\s*(\d+)\s+(오전|오후)\s+(\d+):(\d+):(\d+)/);
+                if (match) {
+                    let [_, year, month, day, meridiem, hour, min, sec] = match;
+                    let h = parseInt(hour, 10);
+                    if (meridiem === '오후' && h !== 12) h += 12;
+                    if (meridiem === '오전' && h === 12) h = 0;
+                    return new Date(parseInt(year), parseInt(month) - 1, parseInt(day), h, parseInt(min), parseInt(sec)).getTime();
+                }
+                // 실패 시 기본 파싱 시도
+                return Date.parse(d) || 0;
+            };
+            return parseKoreanDate(b.timestamp) - parseKoreanDate(a.timestamp);
+        });
+
+        const latest = { ...sorted[0] }; // 객체 복사
+
+        // 최신 데이터에 담당자 이름이 없는 경우, 이전 기록에서 찾음 (누락 정보 보완)
+        if (!latest.managerName && sorted.length > 1) {
+            const previousWithManager = sorted.find(r => r.managerName);
+            if (previousWithManager) {
+                latest.managerName = previousWithManager.managerName;
+            }
+        }
+
+        return latest;
+    });
+
+    // 도움말: 비교를 위한 정규화 함수 (공백 제거)
+    const normalizeKey = (s: string) => s.normalize('NFC').replace(/\s+/g, '');
+
+    const submittedKeys = new Set(deduplicated.map(r => normalizeKey(r.orgName)));
 
     const submittedOrgs = MASTER_ORGS.filter(org =>
-        submittedNames.has(org.name)
+        submittedKeys.has(normalizeKey(org.name))
     );
     const unsubmittedOrgs = MASTER_ORGS.filter(org =>
-        !submittedNames.has(org.name)
+        !submittedKeys.has(normalizeKey(org.name))
     );
 
     const totalBoxes = deduplicated.reduce((sum, r) => sum + r.boxes, 0);
