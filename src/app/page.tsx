@@ -1,0 +1,768 @@
+'use client';
+
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
+  ResponsiveContainer, Cell
+} from 'recharts';
+import {
+  RefreshCw, Download, Search, Sun, Moon, Package, Hash,
+  Building2, AlertCircle, Phone, ChevronDown, Loader2,
+  CheckCircle2, XCircle, Clock, TrendingUp
+} from 'lucide-react';
+import { fetchSheetData, processDashboardData } from '@/lib/fetchSheetData';
+import { CITIES, TOTAL_ORGS } from '@/lib/masterData';
+import type { DashboardData, Organization, SurveyResponse } from '@/lib/masterData';
+
+const REFRESH_INTERVAL = 60_000; // 60초
+
+const CHART_COLORS = [
+  '#2563EB', '#06B6D4', '#10B981', '#8B5CF6', '#F59E0B',
+  '#EF4444', '#EC4899', '#14B8A6', '#6366F1', '#F97316',
+  '#84CC16', '#0EA5E9', '#D946EF', '#22D3EE', '#A855F7',
+  '#FB923C', '#4ADE80', '#38BDF8',
+];
+
+export default function Dashboard() {
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [darkMode, setDarkMode] = useState(false);
+  const [cityFilter, setCityFilter] = useState<string>('전체');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState<'submitted' | 'unsubmitted'>('submitted');
+  const [showCityDropdown, setShowCityDropdown] = useState(false);
+
+  // 데이터 로드
+  const loadData = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
+
+    try {
+      const responses = await fetchSheetData();
+      const processed = processDashboardData(responses);
+      setData(processed);
+      setLastUpdated(new Date());
+    } catch (err) {
+      console.error('데이터 로드 실패:', err);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  // 초기 로드 + 자동 폴링
+  useEffect(() => {
+    loadData();
+    const interval = setInterval(() => loadData(true), REFRESH_INTERVAL);
+    return () => clearInterval(interval);
+  }, [loadData]);
+
+  // 다크모드 토글
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [darkMode]);
+
+  // 필터링된 응답 데이터
+  const filteredResponses = useMemo(() => {
+    if (!data) return [];
+    let filtered = data.responses;
+
+    if (cityFilter !== '전체') {
+      filtered = filtered.filter(r => r.city === cityFilter);
+    }
+
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      filtered = filtered.filter(r =>
+        r.orgName.toLowerCase().includes(q) ||
+        r.city.toLowerCase().includes(q)
+      );
+    }
+
+    return filtered;
+  }, [data, cityFilter, searchQuery]);
+
+  // 필터링된 미제출 기관
+  const filteredUnsubmitted = useMemo(() => {
+    if (!data) return [];
+    let list = data.unsubmittedOrgs;
+
+    if (cityFilter !== '전체') {
+      list = list.filter(o => o.city === cityFilter);
+    }
+
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter(o =>
+        o.name.toLowerCase().includes(q) ||
+        o.city.toLowerCase().includes(q) ||
+        o.code.toLowerCase().includes(q)
+      );
+    }
+
+    return list;
+  }, [data, cityFilter, searchQuery]);
+
+  // CSV 익스포트
+  const exportCSV = useCallback(() => {
+    if (!data) return;
+
+    if (activeTab === 'submitted') {
+      const headers = '제출시간,시군,기관명,수령 박스 수,내용물 수량,특이사항\n';
+      const rows = filteredResponses.map(r =>
+        `"${r.timestamp}","${r.city}","${r.orgName}",${r.boxes},${r.quantity},"${r.remarks}"`
+      ).join('\n');
+
+      downloadCSV(headers + rows, '제출기관_현황.csv');
+    } else {
+      const headers = '시군,기관코드,기관명,전화번호\n';
+      const rows = filteredUnsubmitted.map(o =>
+        `"${o.city}","${o.code}","${o.name}","${o.phone}"`
+      ).join('\n');
+
+      downloadCSV(headers + rows, '미제출기관_명단.csv');
+    }
+  }, [data, activeTab, filteredResponses, filteredUnsubmitted]);
+
+  function downloadCSV(content: string, filename: string) {
+    const BOM = '\uFEFF';
+    const blob = new Blob([BOM + content], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  // 로딩 스크린
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: 'var(--bg-primary)' }}>
+        <div className="text-center">
+          <div className="relative">
+            <div className="w-20 h-20 rounded-full border-4 border-blue-200 dark:border-blue-900 mx-auto"></div>
+            <div className="w-20 h-20 rounded-full border-4 border-transparent border-t-blue-600 animate-spin absolute top-0 left-1/2 -translate-x-1/2"></div>
+          </div>
+          <p className="mt-6 text-lg font-medium" style={{ color: 'var(--text-secondary)' }}>
+            데이터를 불러오는 중...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!data) return null;
+
+  return (
+    <div className="min-h-screen transition-colors duration-300" style={{ backgroundColor: 'var(--bg-primary)' }}>
+      {/* ── Header ── */}
+      <header
+        className="sticky top-0 z-40 backdrop-blur-xl border-b"
+        style={{
+          backgroundColor: darkMode ? 'rgba(11, 17, 32, 0.85)' : 'rgba(248, 250, 252, 0.85)',
+          borderColor: 'var(--border-color)',
+        }}
+      >
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            {/* Logo & Title */}
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-cyan-500 flex items-center justify-center shadow-lg">
+                <Package className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h1 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>
+                  희망열기 캠페인
+                </h1>
+                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                  물품 배분 현황 대시보드
+                </p>
+              </div>
+            </div>
+
+            {/* Controls */}
+            <div className="flex items-center gap-3">
+              {/* Last Updated */}
+              {lastUpdated && (
+                <div className="hidden sm:flex items-center gap-1.5 text-xs" style={{ color: 'var(--text-muted)' }}>
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>
+                    {lastUpdated.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                  </span>
+                </div>
+              )}
+
+              {/* Refresh Button */}
+              <button
+                onClick={() => loadData(true)}
+                disabled={refreshing}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 hover:scale-105"
+                style={{
+                  backgroundColor: 'var(--bg-card)',
+                  color: 'var(--text-secondary)',
+                  border: '1px solid var(--border-color)',
+                }}
+              >
+                <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+                <span className="hidden sm:inline">새로고침</span>
+              </button>
+
+              {/* Dark/Light Toggle */}
+              <button
+                onClick={() => setDarkMode(!darkMode)}
+                className="p-2 rounded-lg transition-all duration-200 hover:scale-105"
+                style={{
+                  backgroundColor: 'var(--bg-card)',
+                  border: '1px solid var(--border-color)',
+                }}
+              >
+                {darkMode ? (
+                  <Sun className="w-4 h-4 text-amber-400" />
+                ) : (
+                  <Moon className="w-4 h-4" style={{ color: 'var(--text-secondary)' }} />
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+        {/* ── KPI Cards ── */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* 제출율 */}
+          <KPICard
+            icon={<TrendingUp className="w-5 h-5" />}
+            label="제출율"
+            value={`${data.submissionRate}%`}
+            sub={`${data.submittedCount} / ${data.totalOrgs}개소`}
+            color="#2563EB"
+            delay={0}
+          >
+            <div className="mt-3 w-full h-2 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--border-color)' }}>
+              <div
+                className="h-full rounded-full progress-bar-fill"
+                style={{
+                  width: `${data.submissionRate}%`,
+                  background: 'linear-gradient(90deg, #2563EB, #06B6D4)',
+                }}
+              />
+            </div>
+          </KPICard>
+
+          {/* 누적 박스 */}
+          <KPICard
+            icon={<Package className="w-5 h-5" />}
+            label="누적 박스"
+            value={data.totalBoxes.toLocaleString()}
+            sub="수령 박스 합계"
+            color="#06B6D4"
+            delay={1}
+          />
+
+          {/* 누적 수량 */}
+          <KPICard
+            icon={<Hash className="w-5 h-5" />}
+            label="누적 수량"
+            value={data.totalQuantity.toLocaleString()}
+            sub="내용물 총 수량"
+            color="#10B981"
+            delay={2}
+          />
+
+          {/* 미제출 기관 */}
+          <KPICard
+            icon={<Building2 className="w-5 h-5" />}
+            label="미제출 기관"
+            value={`${data.unsubmittedOrgs.length}개소`}
+            sub="독려 필요"
+            color="#EF4444"
+            delay={3}
+          />
+        </div>
+
+        {/* ── 시·군별 배분 현황 차트 ── */}
+        <div
+          className="rounded-2xl p-6 animate-fade-in-up"
+          style={{
+            backgroundColor: 'var(--bg-card)',
+            boxShadow: 'var(--shadow-card)',
+            border: '1px solid var(--border-color)',
+            animationDelay: '0.3s',
+          }}
+        >
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>
+                시·군별 배분 현황
+              </h2>
+              <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
+                지역별 수령 박스 수 현황
+              </p>
+            </div>
+          </div>
+
+          <div className="w-full h-[350px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={data.cityStats} margin={{ top: 5, right: 10, left: 0, bottom: 60 }}>
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke={darkMode ? '#334155' : '#E2E8F0'}
+                  vertical={false}
+                />
+                <XAxis
+                  dataKey="city"
+                  tick={{ fontSize: 11, fill: darkMode ? '#94A3B8' : '#475569' }}
+                  angle={-45}
+                  textAnchor="end"
+                  height={60}
+                  tickLine={false}
+                  axisLine={{ stroke: darkMode ? '#334155' : '#E2E8F0' }}
+                />
+                <YAxis
+                  tick={{ fontSize: 11, fill: darkMode ? '#94A3B8' : '#475569' }}
+                  tickLine={false}
+                  axisLine={false}
+                  allowDecimals={false}
+                />
+                <RechartsTooltip
+                  contentStyle={{
+                    backgroundColor: darkMode ? '#1E293B' : '#FFFFFF',
+                    border: `1px solid ${darkMode ? '#334155' : '#E2E8F0'}`,
+                    borderRadius: '12px',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                    color: darkMode ? '#F1F5F9' : '#0F172A',
+                    fontSize: '13px',
+                  }}
+                  formatter={(value: number | undefined, name: string | undefined) => {
+                    const label = name === 'boxes' ? '박스' : name === 'quantity' ? '수량' : (name ?? '');
+                    return [(value ?? 0).toLocaleString(), label];
+                  }}
+                  labelFormatter={(label) => `📍 ${label}`}
+                  cursor={{ fill: darkMode ? 'rgba(59, 130, 246, 0.1)' : 'rgba(37, 99, 235, 0.06)' }}
+                />
+                <Bar dataKey="boxes" name="boxes" radius={[6, 6, 0, 0]} maxBarSize={40}>
+                  {data.cityStats.map((_entry, index) => (
+                    <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* ── Filters & Search Bar ── */}
+        <div
+          className="rounded-2xl p-4 flex flex-col sm:flex-row gap-3"
+          style={{
+            backgroundColor: 'var(--bg-card)',
+            boxShadow: 'var(--shadow-card)',
+            border: '1px solid var(--border-color)',
+          }}
+        >
+          {/* City Filter Dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setShowCityDropdown(!showCityDropdown)}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium min-w-[140px] justify-between transition-all"
+              style={{
+                backgroundColor: cityFilter !== '전체' ? '#2563EB' : 'var(--bg-primary)',
+                color: cityFilter !== '전체' ? '#FFFFFF' : 'var(--text-primary)',
+                border: '1px solid var(--border-color)',
+              }}
+            >
+              <span>{cityFilter}</span>
+              <ChevronDown className={`w-4 h-4 transition-transform ${showCityDropdown ? 'rotate-180' : ''}`} />
+            </button>
+
+            {showCityDropdown && (
+              <>
+                <div className="fixed inset-0 z-30" onClick={() => setShowCityDropdown(false)} />
+                <div
+                  className="absolute top-full left-0 mt-1 rounded-xl shadow-xl z-40 max-h-64 overflow-y-auto min-w-[160px]"
+                  style={{
+                    backgroundColor: 'var(--bg-card)',
+                    border: '1px solid var(--border-color)',
+                  }}
+                >
+                  <button
+                    onClick={() => { setCityFilter('전체'); setShowCityDropdown(false); }}
+                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
+                    style={{ color: 'var(--text-primary)' }}
+                  >
+                    전체
+                  </button>
+                  {CITIES.map(city => (
+                    <button
+                      key={city}
+                      onClick={() => { setCityFilter(city); setShowCityDropdown(false); }}
+                      className="w-full text-left px-4 py-2.5 text-sm hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
+                      style={{
+                        color: 'var(--text-primary)',
+                        backgroundColor: cityFilter === city ? (darkMode ? 'rgba(37, 99, 235, 0.2)' : 'rgba(37, 99, 235, 0.08)') : 'transparent',
+                      }}
+                    >
+                      {city}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Search */}
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--text-muted)' }} />
+            <input
+              type="text"
+              placeholder="기관명, 지역 검색..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 rounded-xl text-sm outline-none transition-all focus:ring-2 focus:ring-blue-500/50"
+              style={{
+                backgroundColor: 'var(--bg-primary)',
+                color: 'var(--text-primary)',
+                border: '1px solid var(--border-color)',
+              }}
+            />
+          </div>
+
+          {/* Tab Toggle */}
+          <div
+            className="flex rounded-xl overflow-hidden"
+            style={{ border: '1px solid var(--border-color)' }}
+          >
+            <button
+              onClick={() => setActiveTab('submitted')}
+              className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-all"
+              style={{
+                backgroundColor: activeTab === 'submitted' ? '#2563EB' : 'transparent',
+                color: activeTab === 'submitted' ? '#FFFFFF' : 'var(--text-secondary)',
+              }}
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>제출 ({data.submittedCount})</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('unsubmitted')}
+              className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-all"
+              style={{
+                backgroundColor: activeTab === 'unsubmitted' ? '#EF4444' : 'transparent',
+                color: activeTab === 'unsubmitted' ? '#FFFFFF' : 'var(--text-secondary)',
+              }}
+            >
+              <XCircle className="w-4 h-4" />
+              <span>미제출 ({data.unsubmittedOrgs.length})</span>
+            </button>
+          </div>
+
+          {/* CSV Export */}
+          <button
+            onClick={exportCSV}
+            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 hover:scale-105"
+            style={{
+              backgroundColor: '#10B981',
+              color: '#FFFFFF',
+            }}
+          >
+            <Download className="w-4 h-4" />
+            <span>CSV</span>
+          </button>
+        </div>
+
+        {/* ── Data Table ── */}
+        <div
+          className="rounded-2xl overflow-hidden animate-fade-in-up"
+          style={{
+            backgroundColor: 'var(--bg-card)',
+            boxShadow: 'var(--shadow-card)',
+            border: '1px solid var(--border-color)',
+            animationDelay: '0.4s',
+          }}
+        >
+          {activeTab === 'submitted' ? (
+            <SubmittedTable responses={filteredResponses} darkMode={darkMode} />
+          ) : (
+            <UnsubmittedTable orgs={filteredUnsubmitted} darkMode={darkMode} />
+          )}
+        </div>
+
+        {/* ── 자동 갱신 안내 Footer ── */}
+        <div className="text-center py-4">
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+            데이터는 60초마다 자동으로 갱신됩니다 · 경상남도 노인맞춤돌봄서비스 광역지원기관
+          </p>
+        </div>
+      </main>
+
+      {/* ── Refreshing Indicator ── */}
+      {refreshing && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-2.5 rounded-full shadow-xl"
+          style={{
+            background: 'linear-gradient(135deg, #2563EB, #06B6D4)',
+            color: '#FFFFFF',
+          }}
+        >
+          <Loader2 className="w-4 h-4 animate-spin" />
+          <span className="text-sm font-medium">갱신 중...</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── KPI Card Component ── */
+function KPICard({
+  icon,
+  label,
+  value,
+  sub,
+  color,
+  delay,
+  children,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  sub: string;
+  color: string;
+  delay: number;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div
+      className="rounded-2xl p-5 animate-fade-in-up transition-all duration-300 hover:scale-[1.02]"
+      style={{
+        backgroundColor: 'var(--bg-card)',
+        boxShadow: 'var(--shadow-card)',
+        border: '1px solid var(--border-color)',
+        animationDelay: `${delay * 0.1}s`,
+      }}
+    >
+      <div className="flex items-center gap-2 mb-3">
+        <div
+          className="w-9 h-9 rounded-lg flex items-center justify-center"
+          style={{ backgroundColor: `${color}15`, color }}
+        >
+          {icon}
+        </div>
+        <span className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
+          {label}
+        </span>
+      </div>
+      <div className="text-2xl font-extrabold animate-count-up" style={{ color: 'var(--text-primary)' }}>
+        {value}
+      </div>
+      <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+        {sub}
+      </p>
+      {children}
+    </div>
+  );
+}
+
+/* ── Submitted Table ── */
+function SubmittedTable({ responses, darkMode }: { responses: SurveyResponse[]; darkMode: boolean }) {
+  if (responses.length === 0) {
+    return (
+      <div className="py-16 text-center">
+        <Package className="w-12 h-12 mx-auto mb-3" style={{ color: 'var(--text-muted)' }} />
+        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+          제출된 데이터가 없습니다
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+            <th className="text-left px-5 py-4 font-semibold text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+              #
+            </th>
+            <th className="text-left px-5 py-4 font-semibold text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+              시·군
+            </th>
+            <th className="text-left px-5 py-4 font-semibold text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+              기관명
+            </th>
+            <th className="text-right px-5 py-4 font-semibold text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+              박스
+            </th>
+            <th className="text-right px-5 py-4 font-semibold text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+              수량
+            </th>
+            <th className="text-center px-5 py-4 font-semibold text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+              비고
+            </th>
+            <th className="text-left px-5 py-4 font-semibold text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+              제출시간
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {responses.map((r, i) => (
+            <tr
+              key={i}
+              className="table-row-hover"
+              style={{ borderBottom: '1px solid var(--border-color)' }}
+            >
+              <td className="px-5 py-3.5 font-medium" style={{ color: 'var(--text-muted)' }}>
+                {i + 1}
+              </td>
+              <td className="px-5 py-3.5">
+                <span
+                  className="inline-flex px-2.5 py-1 rounded-full text-xs font-medium"
+                  style={{
+                    backgroundColor: '#2563EB15',
+                    color: '#2563EB',
+                  }}
+                >
+                  {r.city}
+                </span>
+              </td>
+              <td className="px-5 py-3.5 font-medium" style={{ color: 'var(--text-primary)' }}>
+                {r.orgName}
+              </td>
+              <td className="px-5 py-3.5 text-right font-semibold" style={{ color: 'var(--text-primary)' }}>
+                {r.boxes.toLocaleString()}
+              </td>
+              <td className="px-5 py-3.5 text-right font-semibold" style={{ color: 'var(--text-primary)' }}>
+                {r.quantity.toLocaleString()}
+              </td>
+              <td className="px-5 py-3.5 text-center">
+                {r.remarks ? (
+                  <div className="tooltip-container inline-flex">
+                    <AlertCircle className="w-4 h-4 text-amber-500 cursor-pointer" />
+                    <div className="tooltip-content">{r.remarks}</div>
+                  </div>
+                ) : (
+                  <span style={{ color: 'var(--text-muted)' }}>—</span>
+                )}
+              </td>
+              <td className="px-5 py-3.5 text-xs" style={{ color: 'var(--text-muted)' }}>
+                {r.timestamp ? formatTimestamp(r.timestamp) : '—'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/* ── Unsubmitted Table ── */
+function UnsubmittedTable({ orgs, darkMode }: { orgs: Organization[]; darkMode: boolean }) {
+  if (orgs.length === 0) {
+    return (
+      <div className="py-16 text-center">
+        <CheckCircle2 className="w-12 h-12 mx-auto mb-3 text-emerald-500" />
+        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+          모든 기관이 제출을 완료했습니다! 🎉
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+            <th className="text-left px-5 py-4 font-semibold text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+              #
+            </th>
+            <th className="text-left px-5 py-4 font-semibold text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+              시·군
+            </th>
+            <th className="text-left px-5 py-4 font-semibold text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+              기관코드
+            </th>
+            <th className="text-left px-5 py-4 font-semibold text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+              기관명
+            </th>
+            <th className="text-left px-5 py-4 font-semibold text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+              연락처
+            </th>
+            <th className="text-center px-5 py-4 font-semibold text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+              전화
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {orgs.map((o, i) => (
+            <tr
+              key={o.code}
+              className="table-row-hover"
+              style={{ borderBottom: '1px solid var(--border-color)' }}
+            >
+              <td className="px-5 py-3.5 font-medium" style={{ color: 'var(--text-muted)' }}>
+                {i + 1}
+              </td>
+              <td className="px-5 py-3.5">
+                <span
+                  className="inline-flex px-2.5 py-1 rounded-full text-xs font-medium"
+                  style={{
+                    backgroundColor: '#EF444415',
+                    color: '#EF4444',
+                  }}
+                >
+                  {o.city}
+                </span>
+              </td>
+              <td className="px-5 py-3.5 font-mono text-xs" style={{ color: 'var(--text-secondary)' }}>
+                {o.code}
+              </td>
+              <td className="px-5 py-3.5 font-medium" style={{ color: 'var(--text-primary)' }}>
+                {o.name}
+              </td>
+              <td className="px-5 py-3.5" style={{ color: 'var(--text-secondary)' }}>
+                {o.phone}
+              </td>
+              <td className="px-5 py-3.5 text-center">
+                <a
+                  href={`tel:${o.phone.replace(/-/g, '')}`}
+                  className="inline-flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-200 hover:scale-110"
+                  style={{
+                    backgroundColor: '#10B98115',
+                    color: '#10B981',
+                  }}
+                  title={`${o.name} 전화 걸기`}
+                >
+                  <Phone className="w-4 h-4" />
+                </a>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/* ── Utility ── */
+function formatTimestamp(ts: string): string {
+  try {
+    const date = new Date(ts);
+    if (isNaN(date.getTime())) return ts;
+    return date.toLocaleString('ko-KR', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return ts;
+  }
+}
