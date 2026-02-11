@@ -5,6 +5,7 @@ export interface Organization {
   code: string;        // 기관코드
   name: string;        // 기관명
   phone: string;       // 전화번호
+  manager?: string;    // 담당자 (선택)
 }
 
 export interface SurveyResponse {

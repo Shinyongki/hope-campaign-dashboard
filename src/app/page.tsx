@@ -465,7 +465,10 @@ export default function Dashboard() {
                         {unsubmitted.map(o => (
                           <div key={o.code} className="flex items-center gap-2 text-xs py-1">
                             <XCircle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
-                            <span style={{ color: 'var(--text-secondary)' }}>{o.name}</span>
+                            <span style={{ color: 'var(--text-secondary)' }}>
+                              {o.name}
+                              {o.manager && <span className="text-[10px] ml-1 opacity-75">({o.manager})</span>}
+                            </span>
                             <a href={`tel:${o.phone.replace(/-/g, '')}`} className="ml-auto flex-shrink-0" title={`${o.phone} 전화 걸기`}>
                               <Phone className="w-3 h-3 text-blue-500 hover:text-blue-600" />
                             </a>
@@ -862,6 +865,9 @@ function UnsubmittedTable({ orgs, darkMode }: { orgs: Organization[]; darkMode: 
               기관명
             </th>
             <th className="text-left px-5 py-4 font-semibold text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+              담당자
+            </th>
+            <th className="text-left px-5 py-4 font-semibold text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
               연락처
             </th>
             <th className="text-center px-5 py-4 font-semibold text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
@@ -895,6 +901,9 @@ function UnsubmittedTable({ orgs, darkMode }: { orgs: Organization[]; darkMode: 
               </td>
               <td className="px-5 py-3.5 font-medium" style={{ color: 'var(--text-primary)' }}>
                 {o.name}
+              </td>
+              <td className="px-5 py-3.5 font-medium" style={{ color: 'var(--text-primary)' }}>
+                {o.manager || '—'}
               </td>
               <td className="px-5 py-3.5" style={{ color: 'var(--text-secondary)' }}>
                 {o.phone}
