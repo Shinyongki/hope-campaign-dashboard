@@ -94,9 +94,17 @@ function parseNumber(value: string | undefined): number {
     const totalMatch = noComma.match(/총\s*[:：]?\s*(\d+)/);
     if (totalMatch) return parseInt(totalMatch[1], 10);
 
-    // 첫 번째 숫자 추출 ("8박스" → 8, "562개" → 562, "여자 속옷" → 0)
-    const firstMatch = noComma.match(/(\d+)/);
-    if (firstMatch) return parseInt(firstMatch[1], 10);
+    // 숫자로 시작하면 첫 번째 숫자가 총계 ("1139개(브라:689/팬티450)" → 1139, "8박스" → 8)
+    if (/^\d/.test(noComma)) {
+        const firstMatch = noComma.match(/^(\d+)/);
+        if (firstMatch) return parseInt(firstMatch[1], 10);
+    }
+
+    // 텍스트로 시작하면 모든 숫자를 합산 ("브라 305, 팬티252" → 305+252=557)
+    const allNums = noComma.match(/\d+/g);
+    if (allNums && allNums.length > 0) {
+        return allNums.reduce((sum, n) => sum + parseInt(n, 10), 0);
+    }
 
     return 0;
 }
