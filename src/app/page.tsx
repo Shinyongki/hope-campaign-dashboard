@@ -364,7 +364,7 @@ export default function Dashboard() {
                     color: darkMode ? '#F1F5F9' : '#0F172A',
                     fontSize: '13px',
                   }}
-                  formatter={(value: number, name: string) => {
+                  formatter={(value: any, name: any) => {
                     const label = name === 'submitted' ? '제출' : name === 'unsubmitted' ? '미제출' : name;
                     return [`${value}개소`, label];
                   }}
