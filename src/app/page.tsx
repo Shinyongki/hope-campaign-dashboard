@@ -28,7 +28,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [darkMode, setDarkMode] = useState(false);
+  const [darkMode, setDarkMode] = useState(true);
   const [cityFilter, setCityFilter] = useState<string>('전체');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'submitted' | 'unsubmitted'>('submitted');
@@ -447,6 +447,11 @@ export default function Dashboard() {
                           }}
                         >
                           {submitted.length}/{cityOrgs.length}
+                          {!allDone && (
+                            <span className="text-red-500 font-bold ml-2">
+                              (미제출: {unsubmitted.length}개소)
+                            </span>
+                          )}
                         </span>
                         {allDone && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
                       </div>
@@ -725,12 +730,13 @@ function KPICard({
 
 /* ── Submitted Table ── */
 function SubmittedTable({ responses, darkMode, onRemarkClick }: { responses: SurveyResponse[]; darkMode: boolean; onRemarkClick: (orgName: string, text: string) => void }) {
-  // 기관명으로 전화번호 조회
+  // 기관명으로 전화번호 조회 (NFC 정규화 적용)
   const phoneMap = useMemo(() => {
     const map = new Map<string, string>();
-    MASTER_ORGS.forEach(org => map.set(org.name, org.phone));
+    MASTER_ORGS.forEach(org => map.set(org.name.normalize('NFC').trim(), org.phone));
     return map;
   }, []);
+
   if (responses.length === 0) {
     return (
       <div className="py-16 text-center">
@@ -780,85 +786,93 @@ function SubmittedTable({ responses, darkMode, onRemarkClick }: { responses: Sur
           </tr>
         </thead>
         <tbody>
-          {responses.map((r, i) => (
-            <tr
-              key={i}
-              className="table-row-hover"
-              style={{ borderBottom: '1px solid var(--border-color)' }}
-            >
-              <td className="px-5 py-3.5 font-medium" style={{ color: 'var(--text-muted)' }}>
-                {i + 1}
-              </td>
-              <td className="px-5 py-3.5">
-                <span
-                  className="inline-flex px-2.5 py-1 rounded-full text-xs font-medium"
-                  style={{
-                    backgroundColor: '#2563EB15',
-                    color: '#2563EB',
-                  }}
-                >
-                  {r.city}
-                </span>
-              </td>
-              <td className="px-5 py-3.5 font-medium" style={{ color: 'var(--text-primary)' }}>
-                {r.orgName}
-              </td>
-              <td className="px-5 py-3.5 text-right font-semibold" style={{ color: 'var(--text-primary)' }}>
-                {r.boxes.toLocaleString()}
-              </td>
-              <td className="px-5 py-3.5 text-right font-semibold" style={{ color: 'var(--text-primary)' }}>
-                {r.quantity.toLocaleString()}
-              </td>
-              <td className="px-5 py-3.5 text-center">
-                {r.remarks ? (
-                  <div className="group relative inline-flex">
-                    <button
-                      onClick={() => onRemarkClick(r.orgName, r.remarks)}
-                      className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-all hover:scale-105"
-                      style={{ backgroundColor: '#F59E0B15', color: '#F59E0B' }}
-                    >
-                      <AlertCircle className="w-3.5 h-3.5" />
-                      <span>보기</span>
-                    </button>
-                    {/* Hover Preview Tooltip */}
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 pointer-events-none text-left leading-relaxed"
-                      style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}>
-                      <div className="text-xs font-medium mb-1 text-amber-500">미리보기</div>
-                      <div className="text-xs line-clamp-3">{r.remarks}</div>
-                    </div>
-                  </div>
-                ) : (
-                  <span style={{ color: 'var(--text-muted)' }}>—</span>
-                )}
-              </td>
-              <td className="px-5 py-3.5 text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
-                {r.managerName || '—'}
-              </td>
-              <td className="px-5 py-3.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
-                {phoneMap.get(r.orgName) || '—'}
-              </td>
-              <td className="px-5 py-3.5 text-center">
-                {phoneMap.get(r.orgName) ? (
-                  <a
-                    href={`tel:${phoneMap.get(r.orgName)!.replace(/-/g, '')}`}
-                    className="inline-flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-200 hover:scale-110"
+          {responses.map((r, i) => {
+            const normalizedName = r.orgName.normalize('NFC').trim();
+            const phone = phoneMap.get(normalizedName);
+            const isQuantityError = r.boxes > 0 && r.quantity === 0;
+
+            return (
+              <tr
+                key={i}
+                className="table-row-hover"
+                style={{ borderBottom: '1px solid var(--border-color)' }}
+              >
+                <td className="px-5 py-3.5 font-medium" style={{ color: 'var(--text-muted)' }}>
+                  {i + 1}
+                </td>
+                <td className="px-5 py-3.5">
+                  <span
+                    className="inline-flex px-2.5 py-1 rounded-full text-xs font-medium"
                     style={{
-                      backgroundColor: '#10B98115',
-                      color: '#10B981',
+                      backgroundColor: '#2563EB15',
+                      color: '#2563EB',
                     }}
-                    title={`${r.orgName} 전화 걸기`}
                   >
-                    <Phone className="w-4 h-4" />
-                  </a>
-                ) : (
-                  <span style={{ color: 'var(--text-muted)' }}>—</span>
-                )}
-              </td>
-              <td className="px-5 py-3.5 text-xs" style={{ color: 'var(--text-muted)' }}>
-                {r.timestamp ? formatTimestamp(r.timestamp) : '—'}
-              </td>
-            </tr>
-          ))}
+                    {r.city}
+                  </span>
+                </td>
+                <td className="px-5 py-3.5 font-medium" style={{ color: 'var(--text-primary)' }}>
+                  {r.orgName}
+                </td>
+                <td className="px-5 py-3.5 text-right font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  {r.boxes.toLocaleString()}
+                </td>
+                <td
+                  className={`px-5 py-3.5 text-right font-semibold ${isQuantityError ? 'text-red-500 font-extrabold' : ''}`}
+                  style={{ color: isQuantityError ? undefined : 'var(--text-primary)' }}
+                >
+                  {r.quantity.toLocaleString()}
+                </td>
+                <td className="px-5 py-3.5 text-center">
+                  {r.remarks ? (
+                    <div className="group relative inline-flex">
+                      <button
+                        onClick={() => onRemarkClick(r.orgName, r.remarks)}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-all hover:scale-105"
+                        style={{ backgroundColor: '#F59E0B15', color: '#F59E0B' }}
+                      >
+                        <AlertCircle className="w-3.5 h-3.5" />
+                        <span>보기</span>
+                      </button>
+                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 pointer-events-none text-left leading-relaxed"
+                        style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}>
+                        <div className="text-xs font-medium mb-1 text-amber-500">미리보기</div>
+                        <div className="text-xs line-clamp-3">{r.remarks}</div>
+                      </div>
+                    </div>
+                  ) : (
+                    <span style={{ color: 'var(--text-muted)' }}>—</span>
+                  )}
+                </td>
+                <td className="px-5 py-3.5 text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
+                  {r.managerName || '—'}
+                </td>
+                <td className="px-5 py-3.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                  {phone || '—'}
+                </td>
+                <td className="px-5 py-3.5 text-center">
+                  {phone ? (
+                    <a
+                      href={`tel:${phone.replace(/-/g, '')}`}
+                      className="inline-flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-200 hover:scale-110"
+                      style={{
+                        backgroundColor: '#10B98115',
+                        color: '#10B981',
+                      }}
+                      title={`${r.orgName} 전화 걸기`}
+                    >
+                      <Phone className="w-4 h-4" />
+                    </a>
+                  ) : (
+                    <span style={{ color: 'var(--text-muted)' }}>—</span>
+                  )}
+                </td>
+                <td className="px-5 py-3.5 text-xs" style={{ color: 'var(--text-muted)' }}>
+                  {r.timestamp ? formatTimestamp(r.timestamp) : '—'}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
