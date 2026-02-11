@@ -77,8 +77,9 @@ export default function Dashboard() {
     // return () => clearInterval(interval);
   }, [loadData]);
 
-  // 다크모드 토글
+  // 다크모드 관리
   useEffect(() => {
+    // 초기 로드 시 또는 darkMode 상태 변경 시 class 적용
     if (darkMode) {
       document.documentElement.classList.add('dark');
     } else {
@@ -730,10 +731,14 @@ function KPICard({
 
 /* ── Submitted Table ── */
 function SubmittedTable({ responses, darkMode, onRemarkClick }: { responses: SurveyResponse[]; darkMode: boolean; onRemarkClick: (orgName: string, text: string) => void }) {
-  // 기관명으로 전화번호 조회 (NFC 정규화 적용)
+  // 기관명으로 전화번호 조회 (공백 제거 및 NFC 정규화 적용)
   const phoneMap = useMemo(() => {
     const map = new Map<string, string>();
-    MASTER_ORGS.forEach(org => map.set(org.name.normalize('NFC').trim(), org.phone));
+    MASTER_ORGS.forEach(org => {
+      // 공백 제거 및 정규화
+      const key = org.name.normalize('NFC').replace(/\s+/g, '');
+      map.set(key, org.phone);
+    });
     return map;
   }, []);
 
@@ -787,8 +792,9 @@ function SubmittedTable({ responses, darkMode, onRemarkClick }: { responses: Sur
         </thead>
         <tbody>
           {responses.map((r, i) => {
-            const normalizedName = r.orgName.normalize('NFC').trim();
-            const phone = phoneMap.get(normalizedName);
+            // 검색 키도 동일하게 처리
+            const searchKey = r.orgName.normalize('NFC').replace(/\s+/g, '');
+            const phone = phoneMap.get(searchKey);
             const isQuantityError = r.boxes > 0 && r.quantity === 0;
 
             return (
@@ -818,8 +824,12 @@ function SubmittedTable({ responses, darkMode, onRemarkClick }: { responses: Sur
                   {r.boxes.toLocaleString()}
                 </td>
                 <td
-                  className={`px-5 py-3.5 text-right font-semibold ${isQuantityError ? 'text-red-500 font-extrabold' : ''}`}
-                  style={{ color: isQuantityError ? undefined : 'var(--text-primary)' }}
+                  // isQuantityError일 때 스타일 직접 적용 (inline style보다 class가 우선순위 낮을 수 있으므로 inline style도 조정)
+                  className="px-5 py-3.5 text-right font-semibold"
+                  style={{
+                    color: isQuantityError ? '#EF4444' : 'var(--text-primary)',
+                    fontWeight: isQuantityError ? '800' : '600'
+                  }}
                 >
                   {r.quantity.toLocaleString()}
                 </td>
