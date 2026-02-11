@@ -34,6 +34,7 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<'submitted' | 'unsubmitted'>('submitted');
   const [showCityDropdown, setShowCityDropdown] = useState(false);
   const [expandedCities, setExpandedCities] = useState<Set<string>>(new Set());
+  const [remarkModal, setRemarkModal] = useState<{ orgName: string; text: string } | null>(null);
 
   const toggleCity = useCallback((city: string) => {
     setExpandedCities(prev => {
@@ -507,7 +508,7 @@ export default function Dashboard() {
               <>
                 <div className="fixed inset-0 z-30" onClick={() => setShowCityDropdown(false)} />
                 <div
-                  className="absolute top-full left-0 mt-1 rounded-xl shadow-xl z-40 max-h-64 overflow-y-auto min-w-[160px]"
+                  className="absolute top-full left-0 mt-1 rounded-xl shadow-xl z-40 min-w-[160px]"
                   style={{
                     backgroundColor: 'var(--bg-card)',
                     border: '1px solid var(--border-color)',
@@ -609,7 +610,7 @@ export default function Dashboard() {
           }}
         >
           {activeTab === 'submitted' ? (
-            <SubmittedTable responses={filteredResponses} darkMode={darkMode} />
+            <SubmittedTable responses={filteredResponses} darkMode={darkMode} onRemarkClick={(orgName, text) => setRemarkModal({ orgName, text })} />
           ) : (
             <UnsubmittedTable orgs={filteredUnsubmitted} darkMode={darkMode} />
           )}
@@ -633,6 +634,37 @@ export default function Dashboard() {
         >
           <Loader2 className="w-4 h-4 animate-spin" />
           <span className="text-sm font-medium">갱신 중...</span>
+        </div>
+      )}
+
+      {/* ── Remark Modal ── */}
+      {remarkModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setRemarkModal(null)}>
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" />
+          <div
+            className="relative z-10 w-full max-w-md rounded-2xl p-6 shadow-2xl"
+            style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-2 mb-4">
+              <AlertCircle className="w-5 h-5 text-amber-500" />
+              <h3 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>기타 특이사항</h3>
+            </div>
+            <p className="text-xs font-medium mb-2 px-1" style={{ color: 'var(--text-muted)' }}>{remarkModal.orgName}</p>
+            <div
+              className="rounded-xl p-4 text-sm leading-relaxed whitespace-pre-wrap"
+              style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', border: '1px solid var(--border-color)' }}
+            >
+              {remarkModal.text}
+            </div>
+            <button
+              onClick={() => setRemarkModal(null)}
+              className="mt-4 w-full py-2.5 rounded-xl text-sm font-medium transition-all hover:opacity-90"
+              style={{ backgroundColor: '#2563EB', color: '#FFFFFF' }}
+            >
+              닫기
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -690,7 +722,7 @@ function KPICard({
 }
 
 /* ── Submitted Table ── */
-function SubmittedTable({ responses, darkMode }: { responses: SurveyResponse[]; darkMode: boolean }) {
+function SubmittedTable({ responses, darkMode, onRemarkClick }: { responses: SurveyResponse[]; darkMode: boolean; onRemarkClick: (orgName: string, text: string) => void }) {
   if (responses.length === 0) {
     return (
       <div className="py-16 text-center">
@@ -762,10 +794,14 @@ function SubmittedTable({ responses, darkMode }: { responses: SurveyResponse[]; 
               </td>
               <td className="px-5 py-3.5 text-center">
                 {r.remarks ? (
-                  <div className="tooltip-container inline-flex">
-                    <AlertCircle className="w-4 h-4 text-amber-500 cursor-pointer" />
-                    <div className="tooltip-content">{r.remarks}</div>
-                  </div>
+                  <button
+                    onClick={() => onRemarkClick(r.orgName, r.remarks)}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-all hover:scale-105"
+                    style={{ backgroundColor: '#F59E0B15', color: '#F59E0B' }}
+                  >
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    <span>보기</span>
+                  </button>
                 ) : (
                   <span style={{ color: 'var(--text-muted)' }}>—</span>
                 )}
