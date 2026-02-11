@@ -14,6 +14,7 @@ export interface SurveyResponse {
   boxes: number;       // V열: 수령 박스 수
   quantity: number;    // W열: 내용물 총 수량
   remarks: string;     // X열: 기타 특이사항
+  managerName: string; // Z열: 담당자 (추가)
 }
 
 export interface DashboardData {

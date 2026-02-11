@@ -70,11 +70,11 @@ export default function Dashboard() {
     }
   }, []);
 
-  // 초기 로드 + 자동 폴링
+  // 초기 로드 (자동 폴링 제거: 사용자가 수동 새로고침 사용)
   useEffect(() => {
     loadData();
-    const interval = setInterval(() => loadData(true), REFRESH_INTERVAL);
-    return () => clearInterval(interval);
+    // const interval = setInterval(() => loadData(true), REFRESH_INTERVAL);
+    // return () => clearInterval(interval);
   }, [loadData]);
 
   // 다크모드 토글
@@ -758,6 +758,9 @@ function SubmittedTable({ responses, darkMode, onRemarkClick }: { responses: Sur
               비고
             </th>
             <th className="text-left px-5 py-4 font-semibold text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+              담당자
+            </th>
+            <th className="text-left px-5 py-4 font-semibold text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
               제출시간
             </th>
           </tr>
@@ -794,17 +797,28 @@ function SubmittedTable({ responses, darkMode, onRemarkClick }: { responses: Sur
               </td>
               <td className="px-5 py-3.5 text-center">
                 {r.remarks ? (
-                  <button
-                    onClick={() => onRemarkClick(r.orgName, r.remarks)}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-all hover:scale-105"
-                    style={{ backgroundColor: '#F59E0B15', color: '#F59E0B' }}
-                  >
-                    <AlertCircle className="w-3.5 h-3.5" />
-                    <span>보기</span>
-                  </button>
+                  <div className="group relative inline-flex">
+                    <button
+                      onClick={() => onRemarkClick(r.orgName, r.remarks)}
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-all hover:scale-105"
+                      style={{ backgroundColor: '#F59E0B15', color: '#F59E0B' }}
+                    >
+                      <AlertCircle className="w-3.5 h-3.5" />
+                      <span>보기</span>
+                    </button>
+                    {/* Hover Preview Tooltip */}
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 pointer-events-none text-left leading-relaxed"
+                      style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}>
+                      <div className="text-xs font-medium mb-1 text-amber-500">미리보기</div>
+                      <div className="text-xs line-clamp-3">{r.remarks}</div>
+                    </div>
+                  </div>
                 ) : (
                   <span style={{ color: 'var(--text-muted)' }}>—</span>
                 )}
+              </td>
+              <td className="px-5 py-3.5 text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
+                {r.managerName || '—'}
               </td>
               <td className="px-5 py-3.5 text-xs" style={{ color: 'var(--text-muted)' }}>
                 {r.timestamp ? formatTimestamp(r.timestamp) : '—'}

@@ -74,6 +74,7 @@ function parseCSV(text: string): SurveyResponse[] {
             boxes: parseNumber(fields[21]),      // V열 (Column 21): 수령 박스 수
             quantity: parseNumber(fields[22]),    // W열 (Column 22): 내용물 총 수량
             remarks: fields[23] || '',           // X열 (Column 23): 기타 특이사항
+            managerName: fields[25] || '',       // Z열 (Column 25): 담당자
         };
     }).filter(r => r.orgName !== ''); // 기관명 없는 행은 제외
 }
@@ -197,7 +198,8 @@ function getSampleData(): SurveyResponse[] {
         city: org.city,
         orgName: org.name,
         boxes: Math.floor(Math.random() * 10) + 1,
-        quantity: Math.floor(Math.random() * 100) + 10,
-        remarks: i % 5 === 0 ? '포장 일부 훼손' : '',
+        quantity: Math.floor(Math.random() * 500) + 100,
+        remarks: Math.random() > 0.7 ? "특이사항 있음" : "",
+        managerName: "홍길동",
     }));
 }
